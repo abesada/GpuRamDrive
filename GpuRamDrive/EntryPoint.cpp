@@ -79,7 +79,12 @@ int APIENTRY wWinMain(
 			return 0;
 		}
 	}
-
+#if GPU_API == GPU_API_OPENCL
+	putenv("GPU_MAX_ALLOC_PERCENT=100");
+	putenv("GPU_MAX_HEAP_SIZE=100");
+	putenv("GPU_SINGLE_ALLOC_PERCENT=100");
+	putenv("GPU_FORCE_64BIT_PTR=1");
+#endif
 	if (!gui.Create(hInstance, L"GPU Ram Drive", nCmdShow, gpuMount)) {
 		return -1;
 	}

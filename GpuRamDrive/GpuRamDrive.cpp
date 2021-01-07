@@ -346,6 +346,8 @@ void GPURamDrive::Close()
 
 	if (m_pBuff) delete[] m_pBuff;
 #if GPU_API == GPU_API_OPENCL
+	if (m_Queue) clFlush(m_Queue);
+	if (m_Queue) clFinish(m_Queue);
 	if (m_GpuMem) clReleaseMemObject(m_GpuMem);
 	if (m_Queue) clReleaseCommandQueue(m_Queue);
 	if (m_Context) clReleaseContext(m_Context);
@@ -420,8 +422,36 @@ void GPURamDrive::GpuAllocateRam()
 	if (m_Queue == nullptr) {
 		throw std::runtime_error("Unable to create command queue: " + std::to_string(clRet));
 	}
+	
+	cl_ulong c = 0;
+	cl_int ret_code = clGetDeviceInfo(m_clDeviceId, CL_DEVICE_MAX_MEM_ALLOC_SIZE, sizeof(cl_ulong), &c, nullptr);
+	if (ret_code != CL_SUCCESS) {
+		throw std::runtime_error("Unable to allocate memory: " + std::to_string(ret_code));
+	}
 
-	m_GpuMem = clCreateBuffer(m_Context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, m_MemSize, nullptr, &clRet);
+	char vendor[1024] = {};
+	ret_code = clGetDeviceInfo(m_clDeviceId, CL_DEVICE_VENDOR, sizeof(vendor), vendor, nullptr);
+	if (ret_code != CL_SUCCESS) {
+		throw std::runtime_error("Unable to get platform: " + std::to_string(ret_code));
+	}
+
+	if (strstr(vendor, "Advanced Micro Devices") != NULL)
+	{
+		m_GpuMem = clCreateBuffer(m_Context, CL_MEM_READ_WRITE, m_MemSize, nullptr, &clRet);
+	}
+	else 
+	{
+		m_GpuMem = clCreateBuffer(m_Context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, m_MemSize, nullptr, &clRet);
+	}
+
+	/*
+	// Bzrr version
+	m_pBuff = new char[m_MemSize];
+	m_GpuMem = clCreateBuffer(m_Context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, m_MemSize, m_pBuff, &clRet);
+	free(m_pBuff);
+	m_pBuff = nullptr;
+	*/
+
 	if (m_GpuMem == nullptr) {
 		throw std::runtime_error("Unable to create memory buffer: " + std::to_string(clRet));
 	}
@@ -467,7 +497,7 @@ safeio_ssize_t GPURamDrive::GpuRead(void *buf, safeio_size_t size, off_t_64 offs
 	if (clEnqueueReadBuffer(m_Queue, m_GpuMem, CL_TRUE, (size_t)offset, (size_t)size, buf, 0, nullptr, nullptr) != CL_SUCCESS) {
 		return 0;
 	}
-
+	
 	return size;
 #endif
 }
